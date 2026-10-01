@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// Reviewer "login" = anonymous auth + any display name + the shared password below.
+// Rules are never shipped to the browser, so the password stays private.
+// Change it here, then: firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function sharedCode() {
+      return 'loyal';
+    }
+
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isMember() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && me().code == sharedCode();
+    }
+
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'code'])
+        && request.resource.data.name is string
+        && request.resource.data.name.trim().size() > 0
+        && request.resource.data.name.size() <= 40
+        && request.resource.data.code == sharedCode();
+    }
+
+    // Personal reading highlights: only the owner can see or change them.
+    match /highlights/{owner}/items/{id} {
+      allow read, write: if isMember() && me().name.lower() == owner;
+    }
+
+    match /comments/{id} {
+      allow read: if isMember();
+      allow create: if isMember()
+        && request.resource.data.author == me().name
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() < 20000;
+      // anyone may resolve/reopen; only the author may edit text
+      allow update: if isMember() && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved', 'resolvedBy'])
+        || (resource.data.author == me().name
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])));
+      allow delete: if isMember() && resource.data.author == me().name;
+    }
+  }
+}

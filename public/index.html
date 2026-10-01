@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ideation Review</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="login" class="login hidden">
+    <form id="login-form" class="login-card">
+      <h1>Ideation Review</h1>
+      <p class="muted">Enter any display name and the shared password you were given.</p>
+      <ul class="small muted login-notes">
+        <li><b>Highlights</b> are private: only you can see them.</li>
+        <li><b>Comments</b> are shared with every reviewer.</li>
+      </ul>
+      <label>Name <input id="login-name" autocomplete="username" required></label>
+      <label>Password <input id="login-code" type="password" autocomplete="current-password" required></label>
+      <button type="submit">Enter</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </div>
+
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <button id="nav-toggle" class="icon-btn" title="Runs">☰</button>
+      <strong>Ideation Review</strong>
+      <span id="data-stamp" class="muted small"></span>
+      <span class="muted small hint legend">Select text to <span><i class="swatch hl"></i>highlight (only you)</span><span><i class="swatch cm"></i>comment (shared)</span></span>
+      <span class="spacer"></span>
+      <label class="toggle"><input type="checkbox" id="compare-toggle"> Compare clear/vague</label>
+      <span id="whoami" class="muted"></span>
+      <button id="logout" class="link-btn">Log out</button>
+    </header>
+    <nav id="nav" class="nav"></nav>
+    <main id="main" class="main"></main>
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-head">
+        <div class="seg">
+          <button data-mode="view" class="active">This view</button>
+          <button data-mode="all">All</button>
+        </div>
+        <label class="toggle small"><input type="checkbox" id="show-resolved"> Show resolved</label>
+      </div>
+      <div id="threads"></div>
+    </aside>
+  </div>
+
+  <div id="sel-bar" class="sel-bar hidden">
+    <button data-sel="highlight" title="Private: only you can see your highlights">🖍 Highlight</button>
+    <button data-sel="comment" title="Shared with all reviewers">💬 Comment</button>
+  </div>
+
+  <div id="float-composer" class="float-composer hidden"></div>
+  <div id="hl-pop" class="sel-bar hl-pop hidden"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

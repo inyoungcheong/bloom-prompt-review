@@ -1,0 +1,8 @@
+# Firebase CLI cache
+.firebase/
+*.log
+
+# Generated from bloom_inputs by export_data.py (candidate data; not committed)
+public/data/
+
+__pycache__/
