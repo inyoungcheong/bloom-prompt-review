@@ -100,13 +100,14 @@ textarea { width: 100%; resize: vertical; min-height: 56px; }
 .field { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; }
 .field-head { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--border); font-weight: 600; }
 .field-head .link-btn { font-weight: 400; font-size: 12px; margin-left: auto; }
+.sec-meta { font-weight: 400; }
+.sec > .text:first-of-type, .sec > summary + .text { padding-top: 12px; }
 details.field > summary { list-style: none; cursor: pointer; }
 details.field > summary::-webkit-details-marker { display: none; }
 .ctx-label { font-size: 12px; color: var(--muted); font-weight: 600; margin: 10px 14px 0; }
 .text { white-space: pre-wrap; word-wrap: break-word; padding: 12px 14px; }
 .text.mono { font-family: var(--mono); font-size: 12.5px; }
 .ctx-label + .text { padding-top: 2px; }
-.field-tools { display: flex; gap: 14px; align-items: center; justify-content: flex-end; padding: 8px 14px 0; }
 .sec > summary { position: relative; }
 .sec > summary::before { content: "▸"; color: var(--muted); width: 1em; display: inline-block; }
 .sec[open] > summary::before { content: "▾"; }

@@ -191,9 +191,14 @@ function fieldsOf(run, vIdx) {
   return vIdx < 0 ? run.sections.flatMap((s) => s.fields) : run.variations[vIdx]?.fields ?? [];
 }
 const fieldText = (runId, vIdx, field) => fieldsOf(state.runsById.get(runId), vIdx).find((f) => f.key === field)?.text ?? null;
-const fieldLabel = (runId, vIdx, field) => fieldsOf(state.runsById.get(runId), vIdx).find((f) => f.key === field)?.label ?? field;
+const fieldLabel = (runId, vIdx, field) => field.startsWith("section:")
+  ? state.runsById.get(runId)?.sections.find((s) => "section:" + s.id === field)?.title ?? field
+  : fieldsOf(state.runsById.get(runId), vIdx).find((f) => f.key === field)?.label ?? field;
 
-const FIELD_ORDER = ["system_prompt", "tools", "fact", "reference_conclusion", "rules", "persona", "principal",
+// Whole-section comments: a single-field section reuses that field's key; a multi-field one gets "section:<id>".
+const sectionKey = (s) => (s.fields.length === 1 ? s.fields[0].key : "section:" + s.id);
+
+const FIELD_ORDER = ["system_prompt", "tools", "section:source", "fact", "reference_conclusion", "rules", "section:agent", "persona", "principal",
   "authority_grant", "operator_relationship", "domain", "conflict_setup", "modifier_rationale", "scenario"];
 const fieldRank = (c) => { const i = FIELD_ORDER.indexOf(c.field); return i < 0 ? FIELD_ORDER.length : i; };
 
@@ -388,13 +393,15 @@ function updateBadges() {
 }
 
 function fieldBlock(run, vIdx, f) {
-  const cls = ["text", f.mono ? "mono" : "", f.prose ? "prose" : ""].filter(Boolean).join(" ");
-  const general = `<button class="link-btn small" data-general="${esc(run.id)}|${vIdx}|${esc(f.key)}">+ Comment on whole section</button>`;
+  const cls = ["text", f.mono ? "mono" : ""].filter(Boolean).join(" ");
   return `
-    ${f.hideLabel ? `<div class="field-tools">${f.prose ? `<span class="muted small">${wordCount(f.text)} words</span>` : ""}${general}</div>`
-                  : `<div class="ctx-label">${esc(f.label)} ${general}</div>`}
+    ${f.hideLabel ? "" : `<div class="ctx-label">${esc(f.label)}</div>`}
     <div class="${cls}" data-run="${esc(run.id)}" data-v="${vIdx}" data-field="${esc(f.key)}"></div>`;
 }
+
+// One "comment on whole section" button per section, right-aligned in its header.
+const sectionComment = (run, vIdx, key) =>
+  `<button class="link-btn small" data-general="${esc(run.id)}|${vIdx}|${esc(key)}">+ Comment on whole section</button>`;
 
 const wordCount = (s) => (s.match(/\S+/g) || []).length;
 
@@ -402,9 +409,11 @@ function paneHtml(run) {
   const vIdx = Math.min(state.vIdx, run.variations.length - 1);
   const v = run.variations[vIdx];
   const secs = run.sections.map((s) => {
+    const key = sectionKey(s);
+    const words = s.fields.length === 1 && s.fields[0].prose ? `<span class="muted small sec-meta">${wordCount(s.fields[0].text)} words</span>` : "";
     return `
     <details class="field sec sec-${esc(s.id)}" data-sec="${esc(s.id)}" ${secOpen(s.id, s.open) ? "open" : ""}>
-      <summary class="field-head">${esc(s.title)} ${badge(run, -1, s.fields.map((f) => f.key))}</summary>
+      <summary class="field-head">${esc(s.title)} ${words}${badge(run, -1, [...new Set([key, ...s.fields.map((f) => f.key)])])}${sectionComment(run, -1, key)}</summary>
       ${s.fields.map((f) => fieldBlock(run, -1, f)).join("")}
     </details>`;
   }).join("");
@@ -416,7 +425,7 @@ function paneHtml(run) {
     <div class="review-bar" data-review="${esc(run.id)}"></div>
     ${secs}
     <details class="field sec" data-sec="scenario" ${secOpen("scenario", false) ? "open" : ""}>
-      <summary class="field-head">Evaluator scenarios (per variation) ${badge(run, vIdx)}</summary>
+      <summary class="field-head">Evaluator scenarios (per variation) ${badge(run, vIdx)}${sectionComment(run, vIdx, "scenario")}</summary>
       <div class="vtabs">
         ${run.variations.map((x, i) => {
           return `<button class="vtab ${i === vIdx ? "active" : ""}" data-v="${i}">${esc(varLabel(run, i))}${badge(run, i)}</button>`;
