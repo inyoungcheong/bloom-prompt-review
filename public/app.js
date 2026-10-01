@@ -685,12 +685,16 @@ function renderSidebar() {
   const focused = document.activeElement?.dataset?.draft;
 
 
-  let list = threads().filter((c) => state.showResolved || isOpen(c));
+  const all = threads().filter((c) => state.showResolved || isOpen(c));
+  const runs = visibleRuns();
+  const order = new Map(runs.map((r, i) => [r.id, i]));
+  const here = all.filter((c) => order.has(c.runId) && (c.vIdx === -1 || c.vIdx === Math.min(state.vIdx, state.runsById.get(c.runId).variations.length - 1)));
+  const [viewBtn, allBtn] = document.querySelectorAll(".seg button");
+  viewBtn.textContent = `${runs.length > 1 ? `These ${runs.length} runs` : "This run"} (${here.length})`;
+  allBtn.textContent = `All runs (${all.length})`;
+  let list = state.mode === "view" ? here : all;
   let html;
   if (state.mode === "view") {
-    const runs = visibleRuns();
-    const order = new Map(runs.map((r, i) => [r.id, i]));
-    list = list.filter((c) => order.has(c.runId) && (c.vIdx === -1 || c.vIdx === Math.min(state.vIdx, state.runsById.get(c.runId).variations.length - 1)));
     list.sort((a, b) => order.get(a.runId) - order.get(b.runId) || fieldRank(a) - fieldRank(b)
       || (a.start ?? -1) - (b.start ?? -1) || byTime(a, b));
     html = list.map((c) => threadHtml(c, runs.length > 1)).join("");
@@ -698,7 +702,7 @@ function renderSidebar() {
     list.sort((a, b) => byTime(b, a));
     html = reviewerSummary() + list.map((c) => threadHtml(c, true)).join("");
   }
-  $("#threads").innerHTML = html || `<p class="empty">${state.mode === "view" ? "No comments in this view yet. Select text to comment. (Highlights are private to you and are not listed here.)" : "No comments yet."}</p>`;
+  $("#threads").innerHTML = html || `<p class="empty">${state.mode === "view" ? "No comments on this run yet. Select text to add one." : "No comments yet."}</p>`;
 
   document.querySelectorAll("#sidebar textarea[data-draft]").forEach((t) => {
     if (drafts[t.dataset.draft]) t.value = drafts[t.dataset.draft];

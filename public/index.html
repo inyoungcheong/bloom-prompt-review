@@ -37,11 +37,14 @@
     <main id="main" class="main"></main>
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-head">
-        <div class="seg">
-          <button data-mode="view" class="active">This view</button>
-          <button data-mode="all">All</button>
+        <div class="sidebar-title">
+          <strong>Comments</strong>
+          <label class="toggle small muted"><input type="checkbox" id="show-resolved"> Show resolved</label>
         </div>
-        <label class="toggle small"><input type="checkbox" id="show-resolved"> Show resolved</label>
+        <div class="seg">
+          <button data-mode="view" class="active">This run</button>
+          <button data-mode="all">All runs</button>
+        </div>
       </div>
       <div id="threads"></div>
     </aside>

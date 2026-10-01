@@ -141,7 +141,10 @@ mark.flash { animation: flash 1.2s ease-out; }
 .swatch.cm { background: var(--cm-strong); }
 
 /* sidebar */
-.sidebar-head { position: sticky; top: 0; z-index: 2; background: var(--panel); display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.sidebar-head { position: sticky; top: 0; z-index: 2; background: var(--panel); display: grid; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.sidebar-title { display: flex; align-items: center; justify-content: space-between; }
+.seg { width: 100%; }
+.seg button { flex: 1; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .seg button { border: 0; background: none; padding: 3px 10px; }
 .seg button.active { background: var(--accent-soft); color: var(--accent); }
