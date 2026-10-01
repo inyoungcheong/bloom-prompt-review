@@ -1,4 +1,4 @@
-# Ideation Review site
+# Loyal Agent Prompt Review
 
 This is a static page for reviewing the target system prompts (and the tools, source case, and evaluator scenarios around them) in `bloom_inputs/*/`. Reviewers log in with a name and password, highlight text, and leave comments and replies. The page is hosted on Firebase Hosting, and comments are stored in Firestore.
 

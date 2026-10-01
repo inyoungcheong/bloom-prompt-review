@@ -19,6 +19,9 @@ const state = {
   runsById: new Map(),
   comments: new Map(),     // id -> data (shared notes/threads)
   highlights: new Map(),   // id -> data (private to the signed-in reviewer)
+  reviews: new Map(),      // "<runId>__<name>" -> { runId, name, at }: who marked which run reviewed
+  onlyTodo: load("onlyTodo", false),
+  milestones: null,        // last seen { mine, team } progress, for one-time celebrations
   runId: null,
   vIdx: 0,
   compare: load("compare", false),
@@ -70,6 +73,8 @@ function leave() {
   state.unsub = [];
   state.comments.clear();
   state.highlights.clear();
+  state.reviews.clear();
+  state.milestones = null;
   state.me = null;
 }
 
@@ -118,6 +123,12 @@ async function enter(name) {
       renderSidebar();
     }), onErr),
     onSnapshot(myHighlights(), sync(state.highlights, () => refreshHighlights()), onErr),
+    onSnapshot(collection(db, "reviews"), sync(state.reviews, () => {
+      renderNav();
+      updateReviewUI();
+      if (state.mode === "all") renderSidebar();
+      checkMilestones();
+    }), onErr),
   ];
   route();
 }
@@ -129,7 +140,10 @@ async function loadData() {
   const data = await res.json();
   state.runs = data.runs;
   state.runsById = new Map(data.runs.map((r) => [r.id, r]));
-  $("#data-stamp").textContent = "data " + (data.generatedAt || "").replace("T", " ").slice(0, 16);
+  // the date of the ideation export under review, in the reviewer's local time
+  const d = data.generatedAt ? new Date(data.generatedAt) : null;
+  $("#data-stamp").textContent = d && !isNaN(d) ? d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }) : "";
+  $("#data-stamp").title = data.generatedAt ? `Ideation export: ${data.generatedAt}` : "";
 }
 
 function route() {
@@ -201,22 +215,135 @@ function varLabel(run, i) {
 
 // ---------- nav ----------
 
+// ---------- review progress ----------
+
+const TARGET_REVIEWERS = 2;
+const lc = (x) => String(x || "").toLowerCase();
+const reviewId = (runId, name) => `${runId}__${lc(name)}`;
+const reviewersOf = (runId) => [...state.reviews.values()].filter((r) => r.runId === runId)
+  .sort((a, b) => (a.at?.toMillis?.() ?? 0) - (b.at?.toMillis?.() ?? 0));
+const iReviewed = (runId) => state.reviews.has(reviewId(runId, state.me));
+
+function progress() {
+  const total = state.runs.length;
+  const mine = state.runs.filter((r) => iReviewed(r.id)).length;
+  const team = state.runs.filter((r) => reviewersOf(r.id).length >= TARGET_REVIEWERS).length;
+  return { total, mine, team };
+}
+
+function allReviewerNames() {
+  const names = new Map();   // lower -> display
+  for (const r of state.reviews.values()) names.set(lc(r.name), r.name);
+  for (const c of state.comments.values()) if (!names.has(lc(c.author))) names.set(lc(c.author), c.author);
+  return names;
+}
+
+// "D", "I"; word initials for "Inyoung Cheong" → "IC"; first+last letter when first letters clash ("Dn" vs "Da").
+function initials(name) {
+  const words = String(name).trim().split(/\s+/);
+  if (words.length > 1) return (words[0][0] + words[1][0]).toUpperCase();
+  const clash = [...allReviewerNames().keys()].some((n) => n !== lc(name) && n[0] === lc(name)[0]);
+  return clash ? words[0][0].toUpperCase() + words[0].slice(-1) : words[0][0].toUpperCase();
+}
+
+function personHue(name) {
+  let h = 0;
+  for (const ch of lc(name)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return h;
+}
+
+const chip = (name, title = name) =>
+  `<span class="chip" style="--h:${personHue(name)}" title="${esc(title)}">${esc(initials(name))}</span>`;
+
 function renderNav() {
   const open = new Map();
   for (const c of threads()) if (isOpen(c)) open.set(c.runId, (open.get(c.runId) || 0) + 1);
   const cases = new Map();
   for (const r of state.runs) {
+    if (state.onlyTodo && iReviewed(r.id) && r.id !== state.runId) continue;
     if (!cases.has(r.caseId)) cases.set(r.caseId, []);
     cases.get(r.caseId).push(r);
   }
-  $("#nav").innerHTML = [...cases].map(([caseId, runs]) => `
+  const { total, mine, team } = progress();
+  const bar = (n) => `<span class="bar"><i style="width:${total ? (100 * n) / total : 0}%"></i></span>`;
+  $("#nav").innerHTML = `
+    <div class="progress">
+      <div class="prow"><span>You</span>${bar(mine)}<b>${mine}/${total}</b></div>
+      <div class="prow" title="Runs reviewed by at least ${TARGET_REVIEWERS} people"><span>Team</span>${bar(team)}<b>${team}/${total}</b></div>
+      <label class="toggle small"><input type="checkbox" id="only-todo" ${state.onlyTodo ? "checked" : ""}> Only runs I haven't reviewed</label>
+    </div>
+    ${[...cases].map(([caseId, runs]) => `
     <div class="nav-case">Case ${esc(caseId)}<span class="t" title="${esc(runs[0].title)}">${esc(runs[0].title)}</span></div>
-    ${runs.map((r) => `
+    ${runs.map((r) => {
+      const who = reviewersOf(r.id);
+      const done = who.length >= TARGET_REVIEWERS;
+      return `
       <button class="nav-run ${r.id === state.runId ? "active" : ""}" data-run="${esc(r.id)}">
-        <span>${esc(r.style || r.id)}</span>
-        ${open.get(r.id) ? `<span class="badge">${open.get(r.id)}</span>` : ""}
-      </button>`).join("")}
-  `).join("");
+        <span>${esc(r.style || r.id)}${done ? ` <span class="done" title="Reviewed by ${TARGET_REVIEWERS}+ people">✓</span>` : ""}</span>
+        <span class="nav-meta">${who.map((x) => chip(x.name, `${x.name} reviewed this`)).join("")}${open.get(r.id) ? `<span class="badge" title="Open comments">${open.get(r.id)}</span>` : ""}</span>
+      </button>`;
+    }).join("")}`).join("") || `<p class="empty small" style="padding:0 12px">🎉 Nothing left. You've reviewed every run.</p>`}`;
+}
+
+$("#nav").addEventListener("change", (e) => {
+  if (e.target.id !== "only-todo") return;
+  state.onlyTodo = e.target.checked;
+  save("onlyTodo", state.onlyTodo);
+  renderNav();
+});
+
+// "Mark as reviewed" bar under each pane title
+function updateReviewUI() {
+  document.querySelectorAll("#main [data-review]").forEach((el) => {
+    const runId = el.dataset.review;
+    const who = reviewersOf(runId);
+    const mine = iReviewed(runId);
+    el.innerHTML = `
+      <button class="btn ${mine ? "" : "primary"}" data-review-toggle="${esc(runId)}">${mine ? "✓ Reviewed · undo" : "Mark as reviewed"}</button>
+      <span class="muted small">${who.length
+        ? `Reviewed by ${who.map((x) => `${chip(x.name)} ${esc(x.name)}`).join(", ")}`
+        : "No one has marked this run reviewed yet"} · goal ${TARGET_REVIEWERS}</span>`;
+  });
+}
+
+async function toggleReview(runId) {
+  const ref = doc(db, "reviews", reviewId(runId, state.me));
+  try {
+    if (iReviewed(runId)) await deleteDoc(ref);
+    else await setDoc(ref, { runId, name: state.me, at: serverTimestamp() });
+  } catch (err) {
+    console.error(err);
+    alert("Failed: " + (err.code || err.message));
+  }
+}
+
+function checkMilestones() {
+  const p = progress();
+  const prev = state.milestones;
+  state.milestones = p;
+  if (!prev || !p.total) return;   // first snapshot: just record where we are
+  if (prev.mine < p.total && p.mine === p.total) celebrate(`You've reviewed all ${p.total} runs!`);
+  else if (prev.team < p.total && p.team === p.total) celebrate(`Team goal reached: every run has ${TARGET_REVIEWERS}+ reviewers!`);
+}
+
+function celebrate(msg) {
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.textContent = "🎉 " + msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4500);
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const colors = ["#f4b400", "#2f5bd3", "#e8453c", "#0f9d58", "#ab47bc"];
+  for (let k = 0; k < 80; k++) {
+    const c = document.createElement("i");
+    c.className = "confetti";
+    c.style.left = Math.random() * 100 + "vw";
+    c.style.background = colors[k % colors.length];
+    c.style.animationDelay = Math.random() * 0.6 + "s";
+    c.style.setProperty("--drift", (Math.random() * 200 - 100) + "px");
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 3200);
+  }
 }
 
 $("#nav").addEventListener("click", (e) => {
@@ -239,6 +366,7 @@ function renderMain() {
   const runs = visibleRuns();
   $("#main").innerHTML = runs.map((run) => paneHtml(run)).join("") || `<p class="empty">No data.</p>`;
   updateBadges();
+  updateReviewUI();
   refreshHighlights(true);
 }
 
@@ -285,6 +413,7 @@ function paneHtml(run) {
     <h2>Case ${esc(run.caseId)} · ${esc(run.style)}</h2>
     <div class="sub">${esc(run.title)}${run.transactionType ? " — " + esc(run.transactionType) : ""}
       <span class="small">· ${esc(run.agentName)} · ${esc(run.id)}</span></div>
+    <div class="review-bar" data-review="${esc(run.id)}"></div>
     ${secs}
     <details class="field sec" data-sec="scenario" ${secOpen("scenario", false) ? "open" : ""}>
       <summary class="field-head">Evaluator scenarios (per variation) ${badge(run, vIdx)}</summary>
@@ -299,6 +428,8 @@ function paneHtml(run) {
 }
 
 $("#main").addEventListener("click", (e) => {
+  const rv = e.target.closest("[data-review-toggle]");
+  if (rv) return toggleReview(rv.dataset.reviewToggle);
   const tab = e.target.closest(".vtab");
   if (tab) return go(state.runId, Number(tab.dataset.v));
   const gen = e.target.closest("[data-general]");
@@ -565,7 +696,7 @@ function renderSidebar() {
     html = list.map((c) => threadHtml(c, runs.length > 1)).join("");
   } else {
     list.sort((a, b) => byTime(b, a));
-    html = list.map((c) => threadHtml(c, true)).join("");
+    html = reviewerSummary() + list.map((c) => threadHtml(c, true)).join("");
   }
   $("#threads").innerHTML = html || `<p class="empty">${state.mode === "view" ? "No comments in this view yet. Select text to comment. (Highlights are private to you and are not listed here.)" : "No comments yet."}</p>`;
 
@@ -573,6 +704,18 @@ function renderSidebar() {
     if (drafts[t.dataset.draft]) t.value = drafts[t.dataset.draft];
     if (t.dataset.draft === focused) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
   });
+}
+
+function reviewerSummary() {
+  const rows = [...allReviewerNames()].map(([key, name]) => {
+    const runs = [...state.reviews.values()].filter((r) => lc(r.name) === key).length;
+    const comments = [...state.comments.values()].filter((c) => lc(c.author) === key).length;
+    return { name, runs, comments };
+  }).sort((a, b) => b.runs - a.runs || b.comments - a.comments);
+  if (!rows.length) return "";
+  return `<div class="summary">${rows.map((r) => `
+    <div class="srow">${chip(r.name)} <b>${esc(r.name)}</b>
+      <span class="muted small">${r.runs} run${r.runs === 1 ? "" : "s"} · ${r.comments} comment${r.comments === 1 ? "" : "s"}</span></div>`).join("")}</div>`;
 }
 
 function fmtTime(c) {

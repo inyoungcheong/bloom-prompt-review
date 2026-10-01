@@ -35,6 +35,17 @@ service cloud.firestore {
       allow read, write: if isMember() && me().name.lower() == owner;
     }
 
+    // "Mark as reviewed": one doc per (run, reviewer); only you can set or clear your own.
+    match /reviews/{id} {
+      allow read: if isMember();
+      allow create: if isMember()
+        && request.resource.data.keys().hasOnly(['runId', 'name', 'at'])
+        && request.resource.data.name == me().name
+        && request.resource.data.runId is string
+        && id == request.resource.data.runId + '__' + me().name.lower();
+      allow delete: if isMember() && resource.data.name.lower() == me().name.lower();
+    }
+
     match /comments/{id} {
       allow read: if isMember();
       allow create: if isMember()
